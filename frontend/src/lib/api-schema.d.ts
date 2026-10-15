@@ -1334,6 +1334,10 @@ export interface components {
              * @default false
              */
             awaiting_approver: boolean;
+            /** Escrow Term */
+            escrow_term?: number;
+            /** Escrow Term Days */
+            escrow_term_days?: number;
         };
         /** IssueSummaryOut */
         IssueSummaryOut: {
@@ -1361,6 +1365,10 @@ export interface components {
             deadline?: string | null;
             /** Github Url */
             github_url: string;
+            /** Escrow Term */
+            escrow_term?: number;
+            /** Escrow Term Days */
+            escrow_term_days?: number;
         };
         /**
          * MeOut
@@ -1542,6 +1550,10 @@ export interface components {
             signals?: {
                 [key: string]: number;
             };
+            /** Escrow Term */
+            escrow_term?: number | string | null;
+            /** Escrow Term Days */
+            escrow_term_days?: number | string | null;
         };
         /** Publisher */
         Publisher: {
