@@ -833,6 +833,7 @@ DashboardAction = Literal[
     "wait_verdict",
     "rework",
     "wait_merge",
+    "claim_expired",
     "settled",
     "closed",
 ]
