@@ -61,7 +61,6 @@ from misthos.domain.policy import (
     committed_this_month,
     login,
     may_approve,
-    month_start,
     needs_approval,
 )
 from misthos.domain.pricing import (

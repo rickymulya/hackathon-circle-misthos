@@ -3,16 +3,9 @@ own books (#43), and neither leaks what the publisher would rather keep."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from datetime import datetime
-from pathlib import Path
-
-import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from misthos.config import settings
-from misthos.domain.money import Usdc
 from misthos.main import app
 from misthos.store import store
 
