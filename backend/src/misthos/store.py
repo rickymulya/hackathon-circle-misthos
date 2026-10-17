@@ -2681,7 +2681,7 @@ class Store:
 
         for rec in all_records:
             price_val = float(rec.price.decimal) if rec.price else 0.0
-            if rec.state in (IssueState.FUNDED, IssueState.CLAIMED, IssueState.IN_REVIEW, IssueState.ACCEPTED, IssueState.REWORK):
+            if rec.state in (IssueState.FUNDED, IssueState.CLAIMED, IssueState.IN_REVIEW):
                 committed_escrow_usdc += price_val
             elif rec.state == IssueState.PAID:
                 released_usdc += price_val
@@ -2764,10 +2764,10 @@ class Store:
             code, label, needed = _contributor_next_action(rec, party_id, github_login, now=now)
 
             if code != "claim_expired":
-                if rec.state in (IssueState.FUNDED, IssueState.CLAIMED, IssueState.IN_REVIEW, IssueState.REWORK):
-                    owed_in_flight_usdc += price_val
-                elif rec.state == IssueState.ACCEPTED:
+                if code == "wait_merge":
                     about_to_release_usdc += price_val
+                elif rec.state in (IssueState.FUNDED, IssueState.CLAIMED, IssueState.IN_REVIEW):
+                    owed_in_flight_usdc += price_val
                 elif rec.state == IssueState.PAID:
                     paid_date = getattr(rec, "updated_at", None) or rec.paid_at or rec.created_at
                     if paid_date and paid_date.year == current_year:
@@ -2834,9 +2834,11 @@ def _publisher_next_action(rec: IssueRecord) -> tuple[DashboardAction, str, bool
     # 3. Approver required
     if is_awaiting_approver:
         return ("contact_approver", "Get one of the named approvers to approve", True)
-    # 4. In review / accepted / verdict ready
-    if rec.state in (IssueState.IN_REVIEW, IssueState.ACCEPTED) or (
-        rec.submission is not None and (getattr(rec, "review", None) is not None or getattr(rec, "verdict", None) is not None) and rec.state != IssueState.PAID
+    # 4. In review / review verdict ready
+    if rec.state is IssueState.IN_REVIEW or (
+        rec.submission is not None
+        and (getattr(rec, "review", None) is not None or getattr(rec, "verdict", None) is not None)
+        and rec.state != IssueState.PAID
     ):
         return ("review_and_merge", "Read the verdict, then merge", True)
     # 5. Awaiting criteria approval
@@ -2884,15 +2886,21 @@ def _contributor_next_action(
     # 1. Settled / Paid
     if rec.state in (IssueState.PAID, "SETTLED", "PAID"):
         return ("settled", "Paid, and on your statement", False)
-    # 2. Accepted
-    if rec.state == IssueState.ACCEPTED:
+    # 2. Accepted / wait merge: when review passed, ready to merge
+    has_passed_review = bool(
+        rec.state is IssueState.IN_REVIEW
+        and rec.submission is not None
+        and rec.review is not None
+        and rec.review.verdict == "accept"
+    )
+    if has_passed_review:
         return ("wait_merge", "The publisher merges; nothing for you to do", False)
     # 3. Rework
     rev = getattr(rec, "review", None)
     is_rework_verdict = rev is not None and rev.verdict == "rework"
     verdict = getattr(rec, "verdict", None)
     is_verdict_failed = verdict is not None and getattr(verdict, "passed", True) is False
-    if rec.state == IssueState.REWORK or is_rework_verdict or (is_verdict_failed and rec.state != IssueState.PAID):
+    if is_rework_verdict or (is_verdict_failed and rec.state != IssueState.PAID):
         return ("rework", "Answer the findings and push", True)
     # 4. In review / submitted waiting for verdict
     submissions = getattr(rec, "submissions", None) or ([rec.submission] if rec.submission else [])

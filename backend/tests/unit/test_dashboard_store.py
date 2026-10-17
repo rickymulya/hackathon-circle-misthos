@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 from misthos.domain.issue import IssueState
 from misthos.domain.money import Usdc
 from misthos.models.records import IssueRecord
-from misthos.schemas import Claim, Contributor, Publisher, Submission, Wallet
+from misthos.schemas import Claim, Contributor, Publisher, Review, Submission, Wallet
 from misthos.store import _contributor_next_action, _publisher_next_action, store
 
 
@@ -87,7 +87,26 @@ def test_contributor_next_action_priority():
     assert (code, label, needed) == ("settled", "Paid, and on your statement", False)
 
     # 2. ACCEPTED -> wait merge
-    rec_acc = _make_issue("ISS-2", "P1", 2, IssueState.ACCEPTED, contributor_id="C1")
+    sub = Submission(
+        pr_number=10,
+        head_sha="abc",
+        checks_passed=True,
+        files_changed=2,
+        additions=20,
+        deletions=5,
+    )
+    rev_acc = Review(
+        verdict="accept",
+        head_sha="abc",
+        criteria_verified=True,
+        tests_passed=True,
+        analysis="Approved",
+        findings=[],
+        decided_at=now,
+    )
+    rec_acc = _make_issue(
+        "ISS-2", "P1", 2, IssueState.IN_REVIEW, contributor_id="C1", submission=sub, review=rev_acc
+    )
     code, label, needed = _contributor_next_action(rec_acc, "C1", "c1_gh")
     assert (code, label, needed) == (
         "wait_merge",
@@ -96,7 +115,18 @@ def test_contributor_next_action_priority():
     )
 
     # 3. REWORK
-    rec_rew = _make_issue("ISS-3", "P1", 3, IssueState.REWORK, contributor_id="C1")
+    rev_rew = Review(
+        verdict="rework",
+        head_sha="abc",
+        criteria_verified=False,
+        tests_passed=False,
+        analysis="Need changes",
+        findings=[],
+        decided_at=now,
+    )
+    rec_rew = _make_issue(
+        "ISS-3", "P1", 3, IssueState.CLAIMED, contributor_id="C1", submission=sub, review=rev_rew
+    )
     code, label, needed = _contributor_next_action(rec_rew, "C1", "c1_gh")
     assert (code, label, needed) == ("rework", "Answer the findings and push", True)
 
@@ -123,9 +153,7 @@ def test_contributor_next_action_priority():
     assert (code, label, needed) == ("wait_verdict", "Wait for the verdict", False)
 
     # 5. Claimed, no submission -> open_pr
-    rec_claimed = _make_issue(
-        "ISS-5", "P1", 5, IssueState.FUNDED, contributor_id="C1", claim=claim
-    )
+    rec_claimed = _make_issue("ISS-5", "P1", 5, IssueState.FUNDED, contributor_id="C1", claim=claim)
     code, label, needed = _contributor_next_action(rec_claimed, "C1", "c1_gh")
     assert (code, label, needed) == (
         "open_pr",
@@ -174,14 +202,33 @@ def test_publisher_and_contributor_dashboard_queries():
         title="Publisher 2 issue",
         price=Usdc(300_000_000),
     )
+    sub_charlie = Submission(
+        pr_number=102,
+        head_sha="sha_c1",
+        checks_passed=True,
+        files_changed=2,
+        additions=20,
+        deletions=5,
+    )
+    rev_charlie = Review(
+        verdict="accept",
+        head_sha="sha_c1",
+        criteria_verified=True,
+        tests_passed=True,
+        analysis="Good job",
+        findings=[],
+        decided_at=datetime.now(UTC),
+    )
     issue_con1 = _make_issue(
         "ISS-DASH-C1",
         "pub_test_dash_1",
         102,
-        IssueState.ACCEPTED,
+        IssueState.IN_REVIEW,
         title="Charlie work",
         price=Usdc(250_000_000),
         contributor_id="con_test_dash_1",
+        submission=sub_charlie,
+        review=rev_charlie,
     )
     store.repo.save_issues(issue_pub1, issue_pub2, issue_con1)
 
@@ -212,11 +259,20 @@ def test_publisher_and_contributor_dashboard_queries():
 def test_contributor_accepted_issue_excluded_from_action_needed():
     store.ensure_ready()
     now = datetime.now(UTC)
+    rev_acc = Review(
+        verdict="accept",
+        head_sha="sha_acc",
+        criteria_verified=True,
+        tests_passed=True,
+        analysis="Accepted",
+        findings=[],
+        decided_at=now,
+    )
     issue = _make_issue(
         "ISS-ACCEPTED-1",
         "pub_test_dash_1",
         301,
-        IssueState.ACCEPTED,
+        IssueState.IN_REVIEW,
         title="Accepted Work",
         price=Usdc(350_000_000),
         contributor_id="con_test_dash_1",
@@ -234,12 +290,15 @@ def test_contributor_accepted_issue_excluded_from_action_needed():
             additions=10,
             deletions=2,
         ),
+        review=rev_acc,
     )
     store.repo.save_issues(issue)
 
     dash = store.contributor_dashboard("con_test_dash_1", "charlie")
     action_ids = [item.id for item in dash.action_needed]
-    assert "ISS-ACCEPTED-1" not in action_ids, "ACCEPTED issue must not appear in contributor action_needed"
+    assert "ISS-ACCEPTED-1" not in action_ids, (
+        "ACCEPTED issue must not appear in contributor action_needed"
+    )
 
     work_item = next((w for w in dash.all_work if w.id == "ISS-ACCEPTED-1"), None)
     assert work_item is not None
@@ -271,7 +330,9 @@ def test_contributor_expired_claim_excluded_from_action_needed_and_inflight():
 
     dash = store.contributor_dashboard("con_test_dash_1", "charlie")
     action_ids = [item.id for item in dash.action_needed]
-    assert "ISS-EXPIRED-CLAIM" not in action_ids, "Expired claim must not prompt contributor to open/submit PR"
+    assert "ISS-EXPIRED-CLAIM" not in action_ids, (
+        "Expired claim must not prompt contributor to open/submit PR"
+    )
 
     work_item = next((w for w in dash.all_work if w.id == "ISS-EXPIRED-CLAIM"), None)
     assert work_item is not None
