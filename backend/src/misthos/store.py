@@ -551,7 +551,20 @@ class Store:
             self._move(rec, IssueState.CLAIMED)
 
     def _renew_claim(self, rec: IssueRecord, at: datetime) -> None:
-        return
+        if rec.contributor_id is None:
+            return
+        rec.claim = Claim(
+            contributor_id=rec.contributor_id,
+            issued_at=at,
+            expires_at=None,
+            active=True,
+            state="CLAIMED",
+        )
+        for c in rec.claims:
+            if c.contributor_id == rec.contributor_id and c.active:
+                c.issued_at = at
+                c.expires_at = None
+                break
 
     def _submit(self, rec: IssueRecord, pr: dict, contributor_id: str | None = None) -> None:
         if rec.review is not None and rec.review.head_sha == pr["head_sha"]:
@@ -575,7 +588,7 @@ class Store:
             rec.submissions.append(sub)
         rec.submission = sub
 
-        if rec.state in {IssueState.CLAIMED, IssueState.REWORK}:
+        if rec.state is IssueState.CLAIMED:
             self._move(rec, IssueState.IN_REVIEW)
 
         sha = sub.head_sha
@@ -2303,7 +2316,6 @@ class Store:
             if rec.state is not IssueState.FUNDED and rec.state not in {
                 IssueState.CLAIMED,
                 IssueState.IN_REVIEW,
-                IssueState.REWORK,
             }:
                 raise lifecycle.IllegalTransition(rec.state, IssueState.FUNDED)
             when = now or _now()
@@ -2727,8 +2739,6 @@ class Store:
                 when=now,
             )
             rec.accepted_by = "merge"
-        if rec.state is not IssueState.ACCEPTED:
-            self._move(rec, IssueState.ACCEPTED)
         self._pay(rec, now)
 
     # ------------------------------------------------------------ projections

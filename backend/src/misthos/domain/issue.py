@@ -19,14 +19,11 @@ class IssueState(StrEnum):
     PRICED = "PRICED"
     AWAITING_APPROVAL = "AWAITING_APPROVAL"
     FUNDED = "FUNDED"
-    PAID = "PAID"
-    REFUNDED = "REFUNDED"
-    # Legacy / claim track states kept for backwards compatibility
     CLAIMED = "CLAIMED"
     IN_REVIEW = "IN_REVIEW"
     PAID = "PAID"
     REJECTED = "REJECTED"
-    DISPUTED = "DISPUTED"
+    REFUNDED = "REFUNDED"
 
 
 class ClaimState(StrEnum):
@@ -42,9 +39,15 @@ class ClaimState(StrEnum):
 
 
 CLAIM_TRANSITIONS: dict[ClaimState, frozenset[ClaimState]] = {
-    ClaimState.CLAIMED: frozenset({ClaimState.IN_REVIEW, ClaimState.WITHDRAWN, ClaimState.SUPERSEDED}),
-    ClaimState.IN_REVIEW: frozenset({ClaimState.REWORK, ClaimState.ACCEPTED, ClaimState.REJECTED, ClaimState.SUPERSEDED}),
-    ClaimState.REWORK: frozenset({ClaimState.IN_REVIEW, ClaimState.WITHDRAWN, ClaimState.SUPERSEDED}),
+    ClaimState.CLAIMED: frozenset(
+        {ClaimState.IN_REVIEW, ClaimState.WITHDRAWN, ClaimState.SUPERSEDED}
+    ),
+    ClaimState.IN_REVIEW: frozenset(
+        {ClaimState.REWORK, ClaimState.ACCEPTED, ClaimState.REJECTED, ClaimState.SUPERSEDED}
+    ),
+    ClaimState.REWORK: frozenset(
+        {ClaimState.IN_REVIEW, ClaimState.WITHDRAWN, ClaimState.SUPERSEDED}
+    ),
     ClaimState.ACCEPTED: frozenset({ClaimState.SUPERSEDED}),
     ClaimState.REJECTED: frozenset({ClaimState.IN_REVIEW, ClaimState.SUPERSEDED}),
     ClaimState.SUPERSEDED: frozenset(),
@@ -59,12 +62,14 @@ TRANSITIONS: dict[IssueState, frozenset[IssueState]] = {
     IssueState.DRAFT: frozenset({IssueState.PRICED}),
     IssueState.PRICED: frozenset({IssueState.AWAITING_APPROVAL}),
     IssueState.AWAITING_APPROVAL: frozenset({IssueState.DRAFT, IssueState.FUNDED}),
-    IssueState.FUNDED: frozenset({IssueState.CLAIMED, IssueState.IN_REVIEW, IssueState.PAID, IssueState.REFUNDED}),
-    IssueState.CLAIMED: frozenset({IssueState.IN_REVIEW, IssueState.FUNDED, IssueState.PAID, IssueState.REFUNDED}),
+    IssueState.FUNDED: frozenset({IssueState.CLAIMED, IssueState.IN_REVIEW, IssueState.REFUNDED}),
+    IssueState.CLAIMED: frozenset({IssueState.IN_REVIEW, IssueState.FUNDED, IssueState.REFUNDED}),
     # The review verdict lives on the issue, not in the state: a failed review sends
     # the issue back to CLAIMED, where the contributor still holds it and can push a
     # new commit, and a passing one leaves it here until the publisher merges.
-    IssueState.IN_REVIEW: frozenset({IssueState.CLAIMED, IssueState.REJECTED, IssueState.PAID, IssueState.REFUNDED}),
+    IssueState.IN_REVIEW: frozenset(
+        {IssueState.CLAIMED, IssueState.REJECTED, IssueState.PAID, IssueState.REFUNDED}
+    ),
     IssueState.PAID: frozenset(),
     # A rejection sends the issue back to the pool, or, when the contributor's
     # dispute is upheld on a second review, back into review (#39).
@@ -95,6 +100,10 @@ HUMAN_CHECKPOINTS = frozenset(
 # A passing verdict releases without a signature once the publisher has been silent
 # this long. The only release path that does not carry one. See 08.
 SILENT_PUBLISHER_GRACE = timedelta(days=7)
+
+# How long the first claim holds an issue exclusively. With no pull request by then
+# the issue returns to the pool, which is what stops squatting on good work. See 05.
+CLAIM_WINDOW = timedelta(hours=72)
 
 # How long committed funds wait for acceptable work before they go back to the
 # publisher. The escrow contract holds the same deadline on chain.

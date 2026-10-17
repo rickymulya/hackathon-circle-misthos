@@ -74,8 +74,7 @@ HANDLED_EVENTS = {
     "installation_repositories": "connect or disconnect the repositories added or removed",
     "issues": "price an issue labelled for Misthos; refresh the suggestion when it changes",
     "issue_comment": (
-        "/misthos price, /misthos approve, /misthos criteria, /misthos claim and "
-        "/misthos help"
+        "/misthos price, /misthos approve, /misthos criteria, /misthos claim and /misthos help"
     ),
     "pull_request": "submit the claimant's pull request for review; a merge releases the payout",
     "check_run": "record whether the project's own checks passed on the submitted commit",
@@ -320,8 +319,9 @@ def _pull_request(store: Store, repo: str, action: str, payload: dict[str, Any])
                     repo,
                     pr.number,
                     f"Welcome @{pr.author}! Under Misthos's open claim model, anyone can work on "
-                    f"#{number} simultaneously. You have been registered on the roster. Your pull request "
-                    f"will be reviewed against the published criteria, and only the merged pull request pays.",
+                    f"#{number} simultaneously. You have been registered on the roster. "
+                    "Your pull request will be reviewed against the published criteria, "
+                    "and only the merged pull request pays.",
                 )
         except (IllegalTransition, NotTheSubmission) as exc:
             _reply(store, repo, pr.number, f"@{pr.author}, could not submit for #{number}: {exc}")
@@ -517,9 +517,17 @@ def _command(
     if name == "help":
         msg = HELP.format(url=settings.public_url)
         if rec is not None:
-            roster_str = ", ".join(f"@{store._handle(c.contributor_id)}" for c in rec.claims if c.active) or "none"
-            deadline_str = f"{rec.deadline.strftime('%Y-%m-%d %H:%M UTC')}" if rec.deadline else "not set"
-            msg += f"\n\n**Roster for #{rec.number}:** {roster_str}\n**Escrow deadline:** {deadline_str}"
+            roster_str = (
+                ", ".join(f"@{store._handle(c.contributor_id)}" for c in rec.claims if c.active)
+                or "none"
+            )
+            deadline_str = (
+                f"{rec.deadline.strftime('%Y-%m-%d %H:%M UTC')}" if rec.deadline else "not set"
+            )
+            msg += (
+                f"\n\n**Roster for #{rec.number}:** {roster_str}\n"
+                f"**Escrow deadline:** {deadline_str}"
+            )
         return _Ran(True, msg)
     if name not in {"approve", "criteria", "claim", "price"}:
         return _Ran(
@@ -545,7 +553,6 @@ def _command(
             if rec.state is not IssueState.FUNDED and rec.state not in {
                 IssueState.CLAIMED,
                 IssueState.IN_REVIEW,
-                IssueState.REWORK,
             }:
                 return _Ran(
                     False,
@@ -554,10 +561,11 @@ def _command(
             store.claim(rec.id, account.party_id)
             return _Ran(
                 True,
-                f"Claimed by @{login}. Joined the roster to work on #{rec.number}. Multiple contributors may "
-                f"claim and work on this issue simultaneously; the platform reviews your PR against "
-                f"the published criteria, and only the merged pull request is paid. Open a pull request "
-                f"that says `Fixes #{rec.number}`.",
+                f"Claimed by @{login}. Joined the roster to work on #{rec.number}. "
+                "Multiple contributors may claim and work on this issue simultaneously; "
+                "the platform reviews your PR against the published criteria, "
+                "and only the merged pull request is paid. "
+                f"Open a pull request that says `Fixes #{rec.number}`.",
             )
         if account.party_id != rec.publisher_id:
             return _Ran(False, f"@{login}, only the publisher of this issue can {name} it.")
