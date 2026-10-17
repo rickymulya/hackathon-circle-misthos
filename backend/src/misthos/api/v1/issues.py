@@ -496,7 +496,7 @@ async def set_escrow_term(
     Fixed once the escrow holds a commitment.
     """
     rec = await _require(issue_id)
-    require_owner_or_simulation(account, rec.publisher_id, "change the escrow term of this issue")
+    require_owner(account, rec.publisher_id, "change the escrow term of this issue")
     if account is not None:
         require_github(account, "change the escrow term of an issue")
     by = _who(account, "the publisher")
